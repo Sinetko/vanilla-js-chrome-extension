@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>GitLab MR Dashboard</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header id="appHeader" class="header">
+    <h1>MR Dashboard</h1>
+    <select id="repoSwitcher" class="repo-switcher"></select>
+    <div class="header-actions">
+      <button id="openProjectBtn" title="Open project in GitLab" class="icon-btn">↗</button>
+      <button id="refreshBtn" title="Refresh" class="icon-btn">⟳</button>
+      <button id="collapseBtn" title="Collapse stats" class="icon-btn">⌃</button>
+      <button id="infoBtn" title="About this extension" class="icon-btn">ℹ</button>
+      <button id="settingsBtn" title="Settings" class="icon-btn">⚙</button>
+    </div>
+  </header>
+
+  <section id="infoPanel" class="settings-panel hidden">
+    <h2 class="section-title" style="margin-top: 0">About GitLab MR Dashboard</h2>
+    <p class="field-hint">
+      A personal toolbar dashboard for your GitLab merge requests. Tracks one or more
+      repositories at once: open/approved/failed/needs-review counts, tabs per author, search
+      and filters (draft, stale, label), and a background service that keeps polling and
+      sends desktop notifications (new MRs, approvals, merges, pipeline failures, conflicts —
+      each independently toggleable) even while the popup is closed.
+    </p>
+    <p class="field-hint">
+      Your GitLab personal access token is encrypted at rest and gated behind a mandatory
+      password (or Touch ID / Windows Hello, once enrolled) — see Settings → Lock for details
+      on exactly how. Everything is stored locally in this browser profile; nothing is sent
+      anywhere except to your own configured GitLab instance.
+    </p>
+    <p class="field-hint">Not affiliated with or endorsed by GitLab.</p>
+    <p id="infoVersion" class="field-hint"></p>
+    <div class="settings-actions">
+      <button id="closeInfoBtn" class="secondary-btn" type="button">Close</button>
+    </div>
+  </section>
+
+  <section id="welcomeScreen" class="lock-screen hidden">
+    <div class="lock-icon">👋</div>
+    <p class="lock-title">Welcome to GitLab MR Dashboard</p>
+    <p class="field-hint">
+      Track open merge requests across your GitLab projects right from the toolbar, with
+      desktop notifications for the things that need your attention — even while this popup
+      is closed.
+    </p>
+    <p class="field-hint">
+      First, you'll connect your GitLab account and pick a repository. Then you'll create a
+      password — it's required, and it's what keeps your access token encrypted.
+    </p>
+    <button id="getStartedBtn" type="button" class="primary-btn">Get started</button>
+  </section>
+
+  <section id="lockScreen" class="lock-screen hidden">
+    <div class="lock-icon">🔒</div>
+    <p class="lock-title">Enter your password to unlock</p>
+
+    <button id="biometricUnlockBtn" type="button" class="primary-btn hidden">
+      🖐 Use Touch ID / Windows Hello
+    </button>
+    <p id="biometricOrDivider" class="field-hint hidden">or use your password</p>
+
+    <input
+      type="password"
+      id="unlockPasswordInput"
+      autocomplete="current-password"
+      class="password-input"
+      placeholder="Password"
+    />
+    <label class="checkbox-label">
+      <input type="checkbox" id="unlockShowCheckbox" />
+      Show password
+    </label>
+    <button id="unlockBtn" type="button" class="primary-btn">Unlock</button>
+    <p id="unlockError" class="lock-error hidden"></p>
+    <p class="field-hint">Kept it in 1Password? Copy it from there and paste it in above.</p>
+  </section>
+
+  <section id="pinSetupScreen" class="lock-screen hidden">
+    <div class="lock-icon">🔑</div>
+    <p class="lock-title">Create your password</p>
+    <p class="field-hint"
+      >Required — it's mixed directly into the token's encryption key, so this extension
+      can't be used without one. 15+ characters: at least one uppercase letter, one lowercase
+      letter, one digit, and one special character (Latin letters/digits/symbols only).</p
+    >
+    <input
+      type="password"
+      id="setupPasswordInput"
+      autocomplete="new-password"
+      class="password-input"
+      placeholder="New password"
+    />
+    <input
+      type="password"
+      id="setupConfirmPasswordInput"
+      autocomplete="new-password"
+      class="password-input"
+      placeholder="Confirm password"
+    />
+    <label class="checkbox-label">
+      <input type="checkbox" id="setupShowCheckbox" />
+      Show password
+    </label>
+    <button id="setupPinBtn" type="button" class="primary-btn">Set password</button>
+    <p id="setupPinError" class="lock-error hidden"></p>
+    <button id="setupCopyBtn" type="button" class="secondary-btn">Copy password</button>
+    <p id="setupCopyStatus" class="field-hint"></p>
+    <p class="field-hint"
+      >Using 1Password? Chrome doesn't let other extensions inject autofill into this popup,
+      so there's no native integration — use Copy above to save this as a new entry yourself,
+      then paste it back here after every full Chrome restart.</p
+    >
+  </section>
+
+  <section id="settingsPanel" class="settings-panel hidden">
+    <div class="settings-tab-bar">
+      <button type="button" class="settings-tab-btn active" data-tab="general">General</button>
+      <button type="button" class="settings-tab-btn" data-tab="notifications">Notifications</button>
+      <button type="button" class="settings-tab-btn" data-tab="appearance">Appearance</button>
+      <button type="button" class="settings-tab-btn" data-tab="security">Security</button>
+    </div>
+
+    <div class="settings-tab-panel" data-tab-panel="general">
+      <label>
+        GitLab base URL
+        <input id="baseUrlInput" type="text" placeholder="https://gitlab.strictweb.com" />
+      </label>
+
+      <label>
+        <span class="label-row">
+          Personal access token (scope: read_api)
+          <span
+            class="info-icon"
+            tabindex="0"
+            title="User avatar (top-right on GitLab) → Edit profile → Access Tokens → New token. Give it a name, no expiration needed for personal use, check only the 'read_api' scope, then click 'Create personal access token' and copy the value shown once."
+            >?</span
+          >
+        </span>
+        <input id="tokenInput" type="password" placeholder="glpat-..." />
+        <a id="tokenHelpLink" href="#" target="_blank" rel="noopener" class="help-link"
+          >Open GitLab → Access Tokens page</a
+        >
+        <span class="field-hint"
+          >Stored encrypted at rest (AES-GCM). The encryption key is itself wrapped with a key
+          derived from this browser/device — nothing is stored in the clear — but it still
+          can't stop someone who already runs code in this same Chrome profile.</span
+        >
+      </label>
+      <div class="settings-actions">
+        <button id="testConnectionBtn" class="secondary-btn" type="button">Test connection</button>
+      </div>
+
+      <label>
+        Your GitLab username (optional, auto-detected from token)
+        <input id="usernameInput" type="text" placeholder="ivan.kanashchenko" />
+      </label>
+
+      <h3 class="settings-subtitle">Repositories</h3>
+      <div class="repo-add-row">
+        <input
+          id="repoPathInput"
+          type="text"
+          placeholder="namespace/project, e.g. applications/frontend/pa"
+        />
+        <button id="addRepoBtn" type="button" class="secondary-btn">Add</button>
+      </div>
+      <ul id="repoManageList" class="repo-manage-list"></ul>
+    </div>
+
+    <div class="settings-tab-panel hidden" data-tab-panel="notifications">
+      <label>
+        Poll interval
+        <select id="pollIntervalSelect">
+          <option value="2">Every 2 minutes</option>
+          <option value="5">Every 5 minutes</option>
+          <option value="10">Every 10 minutes</option>
+          <option value="15">Every 15 minutes</option>
+          <option value="30">Every 30 minutes</option>
+        </select>
+      </label>
+
+      <h3 class="settings-subtitle">Notify me about</h3>
+      <div class="notif-toggle-grid">
+        <label class="checkbox-label">
+          <input type="checkbox" id="notifNewMr" />
+          New merge request
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="notifNewCommits" />
+          New commits pushed
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="notifReadyForReview" />
+          Draft → ready for review
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="notifApproved" />
+          Approved
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="notifMerged" />
+          Merged
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="notifPipelineFailed" />
+          Pipeline failed on my MR
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="notifNewConflict" />
+          New conflict on my MR
+        </label>
+      </div>
+
+      <h3 class="settings-subtitle">Sound</h3>
+      <label class="checkbox-label">
+        <input type="checkbox" id="soundEnabledCheckbox" />
+        Play a sound with notifications
+      </label>
+      <div class="sound-choice-row">
+        <select id="soundChoiceSelect">
+          <optgroup label="Built-in">
+            <option value="chime.wav">Chime</option>
+            <option value="ding.wav">Ding</option>
+            <option value="pop.wav">Pop</option>
+          </optgroup>
+          <optgroup label="Extra">
+            <option value="notification-ping.mp3">Notification ping</option>
+            <option value="notification-effect.mp3">Notification effect</option>
+            <option value="new-notification.mp3">New notification</option>
+            <option value="new-notification-alt.mp3">New notification (alt)</option>
+            <option value="funny-alarm.mp3">Funny alarm</option>
+            <option value="car-honk.mp3">Car honk</option>
+            <option value="car-engine.mp3">Car engine</option>
+            <option value="dog-bark.mp3">Dog bark</option>
+            <option value="surprise.mp3">Surprise</option>
+            <option value="warning.mp3">Warning</option>
+            <option value="scary-scream.mp3">Scary scream</option>
+          </optgroup>
+        </select>
+        <button id="testSoundBtn" type="button" class="secondary-btn">Test</button>
+      </div>
+    </div>
+
+    <div class="settings-tab-panel hidden" data-tab-panel="appearance">
+      <label>
+        Theme
+        <select id="themeSelect">
+          <option value="system">Match system</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+          <option value="solarized">Solarized</option>
+          <option value="dracula">Dracula</option>
+          <option value="nord">Nord</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="settings-tab-panel hidden" data-tab-panel="security">
+      <h3 class="settings-subtitle" style="margin-top: 0">Password</h3>
+      <p class="field-hint">
+        Required. The password is mixed directly into the token's encryption key — not just a
+        screen lock. After every full Chrome restart, the popup asks for it again before it
+        can read the token at all; the background poller pauses (🔒 badge) until then.
+        15+ characters, Latin letters/digits/symbols only, with at least one uppercase letter,
+        one lowercase letter, one digit, and one special character.
+      </p>
+      <p id="pinLockStatus" class="field-hint"><strong>Password lock: On</strong></p>
+      <input
+        id="newPinInput"
+        type="password"
+        autocomplete="new-password"
+        class="password-input"
+        placeholder="New password"
+      />
+      <input
+        id="confirmPinInput"
+        type="password"
+        autocomplete="new-password"
+        class="password-input"
+        placeholder="Confirm password"
+      />
+      <label class="checkbox-label">
+        <input type="checkbox" id="newPinShowCheckbox" />
+        Show password
+      </label>
+      <p id="changePinStatus" class="field-hint"></p>
+      <div class="settings-actions">
+        <button id="setPinBtn" class="secondary-btn" type="button">Change password</button>
+        <button id="newPinCopyBtn" class="secondary-btn" type="button">Copy password</button>
+      </div>
+      <p class="field-hint"
+        >1Password can't autofill inside this popup (Chrome blocks other extensions from
+        injecting into extension pages) — use Copy above to save the new entry yourself.</p
+      >
+
+      <h3 class="settings-subtitle">Biometric unlock</h3>
+      <p id="biometricStatus" class="field-hint"><strong>Biometric unlock: Off</strong></p>
+      <div class="settings-actions">
+        <button id="enrollBiometricBtn" class="secondary-btn hidden" type="button">
+          Enable Touch ID / Windows Hello
+        </button>
+        <button id="removeBiometricBtn" class="secondary-btn hidden" type="button">
+          Remove biometric unlock
+        </button>
+      </div>
+    </div>
+
+    <div class="settings-actions settings-footer">
+      <button id="saveSettingsBtn" class="primary-btn">Save</button>
+      <span id="settingsStatus" class="settings-status"></span>
+    </div>
+  </section>
+
+  <section id="statusMessage" class="status-message hidden"></section>
+
+  <section id="content" class="content hidden">
+    <div id="statsSection" class="stats-section">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-label">Total open</span>
+          <span id="totalOpen" class="stat-value">–</span>
+        </div>
+        <div class="stat-card approved">
+          <span class="stat-label">Approved</span>
+          <span id="totalApproved" class="stat-value">–</span>
+        </div>
+        <div class="stat-card failed">
+          <span class="stat-label">Failed</span>
+          <span id="totalFailed" class="stat-value">–</span>
+        </div>
+        <div class="stat-card pending">
+          <span class="stat-label">Awaiting approval</span>
+          <span id="totalPending" class="stat-value">–</span>
+        </div>
+      </div>
+
+      <h2 class="section-title">My merge requests</h2>
+      <div class="stats-grid my-stats">
+        <div class="stat-card">
+          <span class="stat-label">Mine total</span>
+          <span id="myTotal" class="stat-value">–</span>
+        </div>
+        <div class="stat-card approved">
+          <span class="stat-label">Mine approved</span>
+          <span id="myApproved" class="stat-value">–</span>
+        </div>
+        <div class="stat-card pending">
+          <span class="stat-label">Mine not approved</span>
+          <span id="myNotApproved" class="stat-value">–</span>
+        </div>
+        <div class="stat-card pending">
+          <span class="stat-label">Needs my review</span>
+          <span id="needsMyReview" class="stat-value">–</span>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Merge requests by author</h2>
+    <input
+      type="text"
+      id="searchInput"
+      class="search-input"
+      placeholder="Search title or !123"
+    />
+    <div class="mr-list-toolbar">
+      <div class="mr-list-toolbar-controls">
+        <select id="draftFilterSelect" class="sort-select">
+          <option value="all">Drafts: all</option>
+          <option value="hide">Drafts: hide</option>
+          <option value="only">Drafts: only</option>
+        </select>
+        <select id="staleFilterSelect" class="sort-select">
+          <option value="all">Stale (&gt;1mo): all</option>
+          <option value="hide">Stale (&gt;1mo): hide</option>
+          <option value="only">Stale (&gt;1mo): only</option>
+        </select>
+        <select id="labelFilterSelect" class="sort-select">
+          <option value="all">All labels</option>
+        </select>
+        <select id="sortSelect" class="sort-select">
+          <option value="created-desc">Created ↓ newest</option>
+          <option value="created-asc">Created ↑ oldest</option>
+          <option value="updated-desc">Last commit ↓ newest</option>
+          <option value="updated-asc">Last commit ↑ oldest</option>
+        </select>
+      </div>
+    </div>
+    <div id="authorTabs" class="author-tabs"></div>
+    <ul id="mrList" class="mr-list"></ul>
+  </section>
+
+  <script src="gitlab-shared.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
