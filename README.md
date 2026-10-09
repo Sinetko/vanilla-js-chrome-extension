@@ -10,10 +10,10 @@ desktop notifications (with sound) — even while the popup is closed.
 2. Click the extension icon. On a fresh install you'll land on a **Welcome screen** first — click **Get started**.
 3. You'll be asked to **create a password** before anything else — Settings isn't reachable until this is done (see "Password lock" below). 15+ characters, with the required mix of upper/lower/digit/symbol.
 4. That leads straight into Settings → **General**: fill in
-   - **GitLab base URL**: `https://gitlab.strictweb.com` (default)
-   - **Personal access token**: create one at `https://gitlab.strictweb.com/-/user_settings/personal_access_tokens` with the `read_api` scope (the `?` icon and the link under the field jump you there directly) — **Test connection** verifies it before you save
+   - **GitLab base URL**: `https://gitlab.com` (default)
+   - **Personal access token**: create one at `https://gitlab.com/-/user_settings/personal_access_tokens` with the `read_api` scope (the `?` icon and the link under the field jump you there directly) — **Test connection** verifies it before you save
    - **Username**: optional, auto-detected from the token via `/api/v4/user`
-   - **Repositories**: add one or more `namespace/project` paths (e.g. `applications/frontend/pa`) — each becomes a repo in the header switcher
+   - **Repositories**: add one or more `namespace/project` paths (e.g. `applications`) — each becomes a repo in the header switcher
 5. Save. The popup loads the active repo's open MRs and refreshes on demand (⟳).
 
 ## Popup
